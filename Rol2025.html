@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapporti Lavoro - Newmeg Srl</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Librerie da CDN alternativo per evitare blocchi di rete -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.1/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        /* Stili personalizzati per migliorare l'aspetto */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .modal-content {
+            max-height: 90vh;
+        }
+        .signature-pad-container {
+            border: 2px dashed #ccc;
+            border-radius: 0.5rem;
+            position: relative;
+            touch-action: none; /* Cruciale per il corretto funzionamento su mobile */
+        }
+        .toast {
+            animation: fade-in-out 3s forwards;
+        }
+        @keyframes fade-in-out {
+            0% { opacity: 0; transform: translateY(20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Schermata di Login -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center bg-gray-900 p-4">
+        <div class="w-full max-w-md bg-white rounded-lg shadow-xl p-8">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800">Newmeg Srl</h1>
+                <p class="text-gray-500">Gestione Rapporti di Lavoro</p>
+            </div>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input type="text" id="username" value="admin" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="password" value="Newmeg@2025" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-md hover:bg-blue-700 transition duration-300">Accedi</button>
+                <p id="login-error" class="text-red-500 text-sm text-center mt-4 hidden">Credenziali non valide.</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Schermata Principale dell'App (nascosta di default) -->
+    <div id="app-screen" class="hidden">
+        <header class="bg-white shadow-md sticky top-0 z-40">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <h1 class="text-xl font-bold text-blue-600">Rapporti Lavoro</h1>
+                <div>
+                    <button id="settings-btn" class="text-gray-600 hover:text-blue-600 transition">
+                        <i class="fas fa-cog fa-lg"></i>
+                    </button>
+                    <button id="logout-btn" class="ml-4 text-gray-600 hover:text-red-600 transition">
+                        <i class="fas fa-sign-out-alt fa-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="container mx-auto p-4">
+            <!-- Pulsante per creare un nuovo rapporto -->
+            <div class="mb-6">
+                <button id="new-report-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:bg-green-700 transition duration-300 flex items-center justify-center">
+                    <i class="fas fa-plus mr-2"></i>
+                    Nuovo Rapporto di Lavoro
+                </button>
+            </div>
+
+            <!-- Lista dei rapporti di lavoro -->
+            <div id="reports-list-container">
+                <h2 class="text-2xl font-semibold mb-4">Rapporti Esistenti</h2>
+                <div id="reports-list" class="space-y-4">
+                    <!-- I rapporti verranno inseriti qui da JavaScript -->
+                    <p class="text-gray-500">Nessun rapporto trovato. Creane uno nuovo per iniziare.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modale Principale (Creazione/Modifica Rapporto) -->
+    <div id="main-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl modal-content overflow-y-auto">
+            <form id="report-form">
+                <input type="hidden" id="report-id">
+                <div class="p-6">
+                    <h2 id="modal-title" class="text-2xl font-bold mb-6">Nuovo Rapporto di Lavoro</h2>
+                    <p class="text-sm text-gray-500 mb-4">Compila i dati principali del rapporto. Potrai aggiungere ore e materiali nei passaggi successivi.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="client-name" class="block text-sm font-medium text-gray-700">Nome Cliente</label>
+                            <input type="text" id="client-name" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="report-name" class="block text-sm font-medium text-gray-700">Nome Intervento</label>
+                            <input type="text" id="report-name" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <label for="report-description" class="block text-sm font-medium text-gray-700">Descrizione Intervento</label>
+                        <textarea id="report-description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                    </div>
+                    <div class="mt-4">
+                        <label for="report-date" class="block text-sm font-medium text-gray-700">Data</label>
+                        <input type="date" id="report-date" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <!-- Sezioni per Ore e Materiali -->
+                    <div class="mt-6">
+                        <!-- Ore Lavorate -->
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-lg font-semibold">Ore Lavorate</h3>
+                            <button type="button" id="add-hours-btn" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600"><i class="fas fa-plus mr-1"></i> Aggiungi</button>
+                        </div>
+                        <div id="hours-summary" class="border rounded-lg p-2 min-h-[50px]"></div>
+
+                        <!-- Materiali Utilizzati -->
+                        <div class="flex justify-between items-center mt-4 mb-2">
+                            <h3 class="text-lg font-semibold">Materiali Utilizzati</h3>
+                            <button type="button" id="add-materials-btn" class="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600"><i class="fas fa-plus mr-1"></i> Aggiungi</button>
+                        </div>
+                        <div id="materials-summary" class="border rounded-lg p-2 min-h-[50px]"></div>
+                    </div>
+
+                    <!-- Firma Cliente -->
+                    <div class="mt-6">
+                        <h3 class="text-lg font-semibold">Firma Cliente</h3>
+                        <div id="signature-container" class="mt-2 p-2 border rounded-lg">
+                            <img id="signature-img" class="hidden mx-auto border" />
+                            <p id="signature-placeholder" class="text-center text-gray-500">Nessuna firma salvata.</p>
+                        </div>
+                        <button type="button" id="add-signature-btn" class="mt-2 w-full bg-gray-600 text-white py-2 rounded-md hover:bg-gray-700">
+                            <i class="fas fa-pencil-alt mr-2"></i> Apri per Firmare
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-100 px-6 py-4 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                    <button type="button" id="preview-report-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition"><i class="fas fa-eye mr-2"></i>Anteprima</button>
+                    <button type="button" id="close-main-modal-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600 transition">Annulla</button>
+                    <button type="submit" id="save-report-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition"><i class="fas fa-save mr-2"></i>Salva Rapporto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modale Inserimento Ore -->
+    <div id="hours-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg">
+            <div class="p-6">
+                <h2 class="text-xl font-bold mb-4">Aggiungi Ore Lavorate</h2>
+                <p class="text-sm text-gray-500 mb-4">Inserisci i dettagli per una sessione di lavoro. Il totale verrà calcolato automaticamente.</p>
+                <form id="hours-form">
+                    <div class="mb-3">
+                        <label for="hour-desc" class="block text-sm font-medium">Descrizione</label>
+                        <input type="text" id="hour-desc" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <label for="hour-qty" class="block text-sm font-medium">Ore</label>
+                            <input type="number" id="hour-qty" step="0.01" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label for="hour-price" class="block text-sm font-medium">Prezzo Orario (€)</label>
+                            <input type="number" id="hour-price" step="0.01" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">Aggiungi Riga</button>
+                    </div>
+                </form>
+            </div>
+            <div class="bg-gray-100 px-6 py-4 flex justify-end">
+                <button type="button" id="close-hours-modal-btn" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Chiudi</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modale Inserimento Materiali -->
+    <div id="materials-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg">
+            <div class="p-6">
+                <h2 class="text-xl font-bold mb-4">Aggiungi Materiale</h2>
+                <p class="text-sm text-gray-500 mb-4">Inserisci i dettagli del materiale utilizzato. Il totale verrà calcolato automaticamente.</p>
+                <form id="materials-form">
+                    <div class="mb-3">
+                        <label for="material-desc" class="block text-sm font-medium">Descrizione Materiale</label>
+                        <input type="text" id="material-desc" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <label for="material-qty" class="block text-sm font-medium">Pezzi/Quantità</label>
+                            <input type="number" id="material-qty" step="1" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        </div>
+                        <div>
+                            <label for="material-price" class="block text-sm font-medium">Prezzo Unitario (€)</label>
+                            <input type="number" id="material-price" step="0.01" required class="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" class="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600">Aggiungi Riga</button>
+                    </div>
+                </form>
+            </div>
+            <div class="bg-gray-100 px-6 py-4 flex justify-end">
+                <button type="button" id="close-materials-modal-btn" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Chiudi</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modale Firma -->
+    <div id="signature-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl">
+            <div class="p-6">
+                <h2 class="text-xl font-bold mb-2">Firma per Accettazione</h2>
+                <div class="p-2 bg-blue-50 border border-blue-200 rounded-md mb-4">
+                    <p class="text-xs text-blue-800">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        <strong>Informativa Privacy (GDPR):</strong> La tua firma è raccolta al solo scopo di confermare l'esecuzione e l'accettazione di questo rapporto di lavoro. Verrà archiviata in modo sicuro e non sarà utilizzata per altri fini.
+                    </p>
+                </div>
+                <div class="signature-pad-container">
+                    <canvas id="signature-canvas" class="w-full h-64 bg-gray-50"></canvas>
+                </div>
+            </div>
+            <div class="bg-gray-100 px-6 py-4 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                <button type="button" id="clear-signature-btn" class="bg-yellow-500 text-white font-bold py-2 px-4 rounded-md hover:bg-yellow-600"><i class="fas fa-eraser mr-2"></i>Pulisci</button>
+                <button type="button" id="close-signature-modal-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600">Annulla</button>
+                <button type="button" id="save-signature-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700"><i class="fas fa-check mr-2"></i>Salva Firma</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Impostazioni e Log -->
+    <div id="settings-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl">
+            <div class="p-6">
+                <h2 class="text-xl font-bold mb-4">Impostazioni & Dati</h2>
+                
+                <!-- Gestione Dati -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-semibold mb-2">Backup e Ripristino</h3>
+                        <p class="text-sm text-gray-500 mb-3">Salva tutti i dati in un file o ripristinali da un backup precedente.</p>
+                        <div class="flex space-x-2">
+                            <button id="backup-btn" class="flex-1 bg-blue-600 text-white py-2 px-3 rounded-md hover:bg-blue-700"><i class="fas fa-download mr-2"></i>Backup Dati</button>
+                            <button onclick="document.getElementById('restore-input').click()" class="flex-1 bg-green-600 text-white py-2 px-3 rounded-md hover:bg-green-700"><i class="fas fa-upload mr-2"></i>Ripristina Dati</button>
+                            <input type="file" id="restore-input" class="hidden" accept=".json">
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold mb-2">Importa / Esporta</h3>
+                        <p class="text-sm text-gray-500 mb-3">Esporta i dati in formati standard o importa da un file.</p>
+                        <div class="flex space-x-2">
+                            <button id="export-csv-btn" class="flex-1 bg-gray-700 text-white py-2 px-3 rounded-md hover:bg-gray-800"><i class="fas fa-file-csv mr-2"></i>Esporta CSV</button>
+                            <button id="export-xlsx-btn" class="flex-1 bg-gray-700 text-white py-2 px-3 rounded-md hover:bg-gray-800"><i class="fas fa-file-excel mr-2"></i>Esporta XLSX</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Log -->
+                <div class="mt-6">
+                    <h3 class="font-semibold mb-2">Log di Console</h3>
+                    <div id="console-log" class="w-full h-48 bg-gray-900 text-green-400 font-mono text-xs p-3 rounded-md overflow-y-auto border border-gray-700"></div>
+                </div>
+            </div>
+            <div class="bg-gray-100 px-6 py-4 flex justify-end">
+                <button type="button" id="close-settings-modal-btn" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale di Conferma -->
+    <div id="confirm-modal" class="fixed inset-0 z-[80] flex items-center justify-center p-4 modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-sm">
+            <div class="p-6 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                    <i class="fas fa-exclamation-triangle text-red-600 fa-lg"></i>
+                </div>
+                <h3 id="confirm-title" class="text-lg font-medium text-gray-900 mt-5">Sei sicuro?</h3>
+                <p id="confirm-message" class="text-sm text-gray-500 mt-2">Questa azione è irreversibile.</p>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 flex justify-center space-x-4">
+                <button type="button" id="confirm-cancel-btn" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm">
+                    Annulla
+                </button>
+                <button type="button" id="confirm-ok-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:w-auto sm:text-sm">
+                    Conferma
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast-notification" class="fixed bottom-5 right-5 z-[90] hidden"></div>
+
+    <!-- Struttura per il PDF posizionata fuori schermo per permettere a html2canvas di calcolarne le dimensioni -->
+    <div id="pdf-content" style="position: absolute; left: -9999px; top: 0; width: 210mm;"></div>
+    
+    <script>
+        // Blocco principale dello script dell'applicazione
+        window.addEventListener('load', () => {
+
+            // --- ELEMENTI DEL DOM ---
+            const loginScreen = document.getElementById('login-screen');
+            const appScreen = document.getElementById('app-screen');
+            const loginForm = document.getElementById('login-form');
+            const loginError = document.getElementById('login-error');
+            const logoutBtn = document.getElementById('logout-btn');
+            
+            const mainModal = document.getElementById('main-modal');
+            const reportForm = document.getElementById('report-form');
+            const modalTitle = document.getElementById('modal-title');
+            const newReportBtn = document.getElementById('new-report-btn');
+            const closeMainModalBtn = document.getElementById('close-main-modal-btn');
+            const saveReportBtn = document.getElementById('save-report-btn');
+            const previewReportBtn = document.getElementById('preview-report-btn');
+            const reportsList = document.getElementById('reports-list');
+            
+            const reportIdInput = document.getElementById('report-id');
+            const clientNameInput = document.getElementById('client-name');
+            const reportNameInput = document.getElementById('report-name');
+            const reportDescriptionInput = document.getElementById('report-description');
+            const reportDateInput = document.getElementById('report-date');
+
+            const addHoursBtn = document.getElementById('add-hours-btn');
+            const addMaterialsBtn = document.getElementById('add-materials-btn');
+            const hoursSummary = document.getElementById('hours-summary');
+            const materialsSummary = document.getElementById('materials-summary');
+
+            const hoursModal = document.getElementById('hours-modal');
+            const hoursForm = document.getElementById('hours-form');
+            const closeHoursModalBtn = document.getElementById('close-hours-modal-btn');
+            
+            const materialsModal = document.getElementById('materials-modal');
+            const materialsForm = document.getElementById('materials-form');
+            const closeMaterialsModalBtn = document.getElementById('close-materials-modal-btn');
+
+            const signatureModal = document.getElementById('signature-modal');
+            const addSignatureBtn = document.getElementById('add-signature-btn');
+            const closeSignatureModalBtn = document.getElementById('close-signature-modal-btn');
+            const clearSignatureBtn = document.getElementById('clear-signature-btn');
+            const saveSignatureBtn = document.getElementById('save-signature-btn');
+            const signatureCanvas = document.getElementById('signature-canvas');
+            const signatureContainer = document.getElementById('signature-container');
+            const signatureImg = document.getElementById('signature-img');
+            const signaturePlaceholder = document.getElementById('signature-placeholder');
+            
+            const settingsModal = document.getElementById('settings-modal');
+            const settingsBtn = document.getElementById('settings-btn');
+            const closeSettingsModalBtn = document.getElementById('close-settings-modal-btn');
+            const consoleLog = document.getElementById('console-log');
+
+            const backupBtn = document.getElementById('backup-btn');
+            const restoreInput = document.getElementById('restore-input');
+            const exportCsvBtn = document.getElementById('export-csv-btn');
+            const exportXlsxBtn = document.getElementById('export-xlsx-btn');
+
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmTitle = document.getElementById('confirm-title');
+            const confirmMessage = document.getElementById('confirm-message');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+            const confirmOkBtn = document.getElementById('confirm-ok-btn');
+
+            const toastContainer = document.getElementById('toast-notification');
+
+            // --- VARIABILI DI STATO ---
+            let db;
+            let signaturePad;
+            let currentReport = null;
+
+            // --- FUNZIONI DI LOGGING ---
+            const log = (message, type = 'info') => {
+                const now = new Date().toLocaleTimeString();
+                const p = document.createElement('p');
+                p.textContent = `[${now}] ${message}`;
+                if (type === 'error') {
+                    p.style.color = '#f87171'; // red-400
+                } else if (type === 'warn') {
+                    p.style.color = '#facc15'; // yellow-400
+                }
+                consoleLog.appendChild(p);
+                consoleLog.scrollTop = consoleLog.scrollHeight;
+                console[type](message);
+            };
+
+            // --- FUNZIONI DI NOTIFICA (TOAST) ---
+            const showToast = (message, type = 'success') => {
+                const toast = document.createElement('div');
+                toast.className = `toast p-4 rounded-lg shadow-lg text-white ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+                toast.textContent = message;
+                toastContainer.innerHTML = '';
+                toastContainer.appendChild(toast);
+                toastContainer.classList.remove('hidden');
+                setTimeout(() => {
+                    toastContainer.classList.add('hidden');
+                }, 3000);
+            };
+
+            // --- GESTIONE DATABASE (INDEXEDDB) ---
+            const initDB = () => {
+                const request = indexedDB.open('NewmegReportsDB', 1);
+
+                request.onerror = (event) => log('Errore IndexedDB: ' + event.target.errorCode, 'error');
+                
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    log('Database aperto con successo.');
+                    loadReports();
+                };
+
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    if (!db.objectStoreNames.contains('reports')) {
+                        const objectStore = db.createObjectStore('reports', { keyPath: 'id' });
+                        objectStore.createIndex('clientName', 'clientName', { unique: false });
+                        log('Object store "reports" creato.');
+                    }
+                };
+            };
+
+            // --- GESTIONE LOGIN ---
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                if (username === 'admin' && password === 'Newmeg@2025') {
+                    loginScreen.classList.add('hidden');
+                    appScreen.classList.remove('hidden');
+                    // CORREZIONE #1: Usa sessionStorage per richiedere il login ad ogni sessione
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    log('Login effettuato con successo.');
+                    initDB();
+                } else {
+                    loginError.classList.remove('hidden');
+                    setTimeout(() => loginError.classList.add('hidden'), 3000);
+                }
+            });
+
+            logoutBtn.addEventListener('click', () => {
+                // CORREZIONE #1: Usa sessionStorage per il logout
+                sessionStorage.removeItem('isLoggedIn');
+                appScreen.classList.add('hidden');
+                loginScreen.classList.remove('hidden');
+                log('Logout effettuato.');
+            });
+
+            // Controllo sessione al caricamento
+            // CORREZIONE #1: Controlla sessionStorage invece di localStorage
+            if (sessionStorage.getItem('isLoggedIn') === 'true') {
+                loginScreen.classList.add('hidden');
+                appScreen.classList.remove('hidden');
+                initDB();
+            }
+
+            // --- FUNZIONI CRUD PER I RAPPORTI ---
+
+            const generateUniqueId = (callback) => {
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.getAll();
+
+                request.onsuccess = () => {
+                    const reports = request.result;
+                    let maxId = 0;
+                    if (reports.length > 0) {
+                        const ids = reports.map(r => parseInt(r.id.split('-')[1], 10)).filter(n => !isNaN(n));
+                        if(ids.length > 0) {
+                            maxId = Math.max(...ids);
+                        }
+                    }
+                    // CORREZIONE #2: Cambia il prefisso dell'ID da "PRO" a "RLN"
+                    const newId = `RLN-${String(maxId + 1).padStart(3, '0')}`;
+                    callback(newId);
+                };
+                request.onerror = (e) => log('Errore nel generare ID unico', 'error');
+            };
+
+            const loadReports = () => {
+                if (!db) return;
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.getAll();
+
+                request.onsuccess = () => {
+                    const reports = request.result.sort((a, b) => b.id.localeCompare(a.id));
+                    renderReportsList(reports);
+                    log(`Caricati ${reports.length} rapporti.`);
+                };
+                request.onerror = (e) => log('Errore nel caricamento dei rapporti', 'error');
+            };
+
+            const renderReportsList = (reports) => {
+                reportsList.innerHTML = '';
+                if (reports.length === 0) {
+                    reportsList.innerHTML = '<p class="text-gray-500 text-center py-4">Nessun rapporto trovato. Creane uno nuovo per iniziare.</p>';
+                    return;
+                }
+
+                reports.forEach(report => {
+                    const total = (report.hours || []).reduce((acc, item) => acc + (item.qty * item.price), 0) +
+                                  (report.materials || []).reduce((acc, item) => acc + (item.qty * item.price), 0);
+
+                    const reportCard = document.createElement('div');
+                    reportCard.className = 'bg-white p-4 rounded-lg shadow-md border-l-4 border-blue-500';
+                    reportCard.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-bold text-lg text-gray-800">${report.clientName}</p>
+                                <p class="text-sm text-gray-600">${report.name}</p>
+                                <p class="text-xs text-gray-400 mt-1">ID: ${report.id} | Data: ${new Date(report.date).toLocaleDateString('it-IT')}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-semibold text-xl text-green-600">€ ${total.toFixed(2)}</p>
+                                ${report.signatureData ? '<span class="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full mt-1 inline-block"><i class="fas fa-check-circle mr-1"></i>Firmato</span>' : '<span class="text-xs text-yellow-700 bg-yellow-100 px-2 py-1 rounded-full mt-1 inline-block"><i class="fas fa-exclamation-triangle mr-1"></i>Non firmato</span>'}
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-3 border-t flex justify-end space-x-2">
+                            <button class="print-btn text-blue-600 hover:text-blue-800 transition" data-id="${report.id}" title="Stampa PDF"><i class="fas fa-print fa-lg"></i></button>
+                            <button class="edit-btn text-yellow-500 hover:text-yellow-700 transition" data-id="${report.id}" title="Modifica"><i class="fas fa-edit fa-lg"></i></button>
+                            <button class="delete-btn text-red-500 hover:text-red-700 transition" data-id="${report.id}" title="Elimina"><i class="fas fa-trash-alt fa-lg"></i></button>
+                        </div>
+                    `;
+                    reportsList.appendChild(reportCard);
+                });
+
+                // Aggiungere event listeners ai nuovi pulsanti
+                document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', (e) => handleEdit(e.currentTarget.dataset.id)));
+                document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', (e) => handleDelete(e.currentTarget.dataset.id)));
+                document.querySelectorAll('.print-btn').forEach(btn => btn.addEventListener('click', (e) => generatePDF(e.currentTarget.dataset.id)));
+            };
+            
+            const saveReport = (reportData) => {
+                const transaction = db.transaction(['reports'], 'readwrite');
+                const store = transaction.objectStore('reports');
+                const request = store.put(reportData);
+                
+                request.onsuccess = () => {
+                    log(`Rapporto ${reportData.id} salvato con successo.`);
+                    showToast('Rapporto salvato con successo!');
+                    loadReports();
+                    closeMainModal();
+                };
+                request.onerror = (e) => {
+                    log('Errore nel salvataggio del rapporto', 'error');
+                    showToast('Errore nel salvataggio', 'error');
+                };
+            };
+            
+            const handleEdit = (id) => {
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.get(id);
+
+                request.onsuccess = () => {
+                    currentReport = request.result;
+                    openMainModal(true);
+                };
+                request.onerror = (e) => log('Errore nel recupero del rapporto per la modifica', 'error');
+            };
+
+            const handleDelete = (id) => {
+                showConfirmDialog(
+                    'Elimina Rapporto',
+                    `Sei sicuro di voler eliminare il rapporto ${id}? L'azione è irreversibile.`,
+                    () => {
+                        const transaction = db.transaction(['reports'], 'readwrite');
+                        const store = transaction.objectStore('reports');
+                        const request = store.delete(id);
+                        
+                        request.onsuccess = () => {
+                            log(`Rapporto ${id} eliminato.`);
+                            showToast('Rapporto eliminato.');
+                            loadReports();
+                        };
+                        request.onerror = (e) => log('Errore nell\'eliminazione del rapporto', 'error');
+                    }
+                );
+            };
+
+            // --- GESTIONE MODALI ---
+
+            const openMainModal = (isEditing = false) => {
+                reportForm.reset();
+                if (isEditing && currentReport) {
+                    modalTitle.textContent = `Modifica Rapporto: ${currentReport.id}`;
+                    reportIdInput.value = currentReport.id;
+                    clientNameInput.value = currentReport.clientName;
+                    reportNameInput.value = currentReport.name;
+                    reportDescriptionInput.value = currentReport.description;
+                    reportDateInput.value = currentReport.date;
+                    renderLineItems();
+                    renderSignature();
+                } else {
+                    modalTitle.textContent = 'Nuovo Rapporto di Lavoro';
+                    reportIdInput.value = '';
+                    reportDateInput.value = new Date().toISOString().split('T')[0];
+                    currentReport = {
+                        id: '',
+                        clientName: '',
+                        name: '',
+                        description: '',
+                        date: '',
+                        hours: [],
+                        materials: [],
+                        signatureData: null
+                    };
+                    renderLineItems();
+                    renderSignature();
+                }
+                mainModal.classList.remove('hidden');
+            };
+
+            const closeMainModal = () => {
+                mainModal.classList.add('hidden');
+                currentReport = null;
+            };
+            
+            newReportBtn.addEventListener('click', () => openMainModal());
+            closeMainModalBtn.addEventListener('click', closeMainModal);
+
+            // --- GESTIONE RIGHE ORE E MATERIALI ---
+
+            const renderLineItems = () => {
+                hoursSummary.innerHTML = '';
+                materialsSummary.innerHTML = '';
+
+                if (currentReport.hours.length > 0) {
+                    currentReport.hours.forEach((item, index) => {
+                        hoursSummary.innerHTML += createLineItemHTML(item, index, 'hour');
+                    });
+                } else {
+                    hoursSummary.innerHTML = '<p class="text-sm text-gray-400 p-2">Nessuna ora aggiunta.</p>';
+                }
+
+                if (currentReport.materials.length > 0) {
+                    currentReport.materials.forEach((item, index) => {
+                        materialsSummary.innerHTML += createLineItemHTML(item, index, 'material');
+                    });
+                } else {
+                    materialsSummary.innerHTML = '<p class="text-sm text-gray-400 p-2">Nessun materiale aggiunto.</p>';
+                }
+                
+                document.querySelectorAll('.delete-line-item').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const type = e.currentTarget.dataset.type;
+                        const index = parseInt(e.currentTarget.dataset.index, 10);
+                        if (type === 'hour') {
+                            currentReport.hours.splice(index, 1);
+                        } else {
+                            currentReport.materials.splice(index, 1);
+                        }
+                        renderLineItems();
+                    });
+                });
+            };
+
+            const createLineItemHTML = (item, index, type) => {
+                const total = (item.qty * item.price).toFixed(2);
+                return `
+                    <div class="flex justify-between items-center p-2 border-b last:border-b-0">
+                        <div class="flex-1">
+                            <p class="font-medium">${item.desc}</p>
+                            <p class="text-xs text-gray-500">${item.qty} x €${item.price.toFixed(2)}</p>
+                        </div>
+                        <div class="flex items-center">
+                            <p class="font-semibold mr-4">€ ${total}</p>
+                            <button type="button" class="delete-line-item text-red-500 hover:text-red-700" data-index="${index}" data-type="${type}"><i class="fas fa-times-circle"></i></button>
+                        </div>
+                    </div>
+                `;
+            };
+
+            addHoursBtn.addEventListener('click', () => hoursModal.classList.remove('hidden'));
+            closeHoursModalBtn.addEventListener('click', () => hoursModal.classList.add('hidden'));
+            hoursForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const desc = document.getElementById('hour-desc').value;
+                const qty = parseFloat(document.getElementById('hour-qty').value);
+                const price = parseFloat(document.getElementById('hour-price').value);
+                if (desc && !isNaN(qty) && !isNaN(price)) {
+                    currentReport.hours.push({ desc, qty, price });
+                    renderLineItems();
+                    hoursForm.reset();
+                    hoursModal.classList.add('hidden');
+                }
+            });
+
+            addMaterialsBtn.addEventListener('click', () => materialsModal.classList.remove('hidden'));
+            closeMaterialsModalBtn.addEventListener('click', () => materialsModal.classList.add('hidden'));
+            materialsForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const desc = document.getElementById('material-desc').value;
+                const qty = parseInt(document.getElementById('material-qty').value, 10);
+                const price = parseFloat(document.getElementById('material-price').value);
+                if (desc && !isNaN(qty) && !isNaN(price)) {
+                    currentReport.materials.push({ desc, qty, price });
+                    renderLineItems();
+                    materialsForm.reset();
+                    materialsModal.classList.add('hidden');
+                }
+            });
+
+            // --- GESTIONE FIRMA ---
+            const setupSignaturePad = () => {
+                try {
+                    if (typeof SignaturePad === 'undefined') {
+                        throw new Error('La libreria SignaturePad non è stata caricata o non è accessibile.');
+                    }
+                    if (signaturePad) {
+                        signaturePad.off();
+                    }
+                    const canvas = document.getElementById('signature-canvas');
+                    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                    canvas.width = canvas.offsetWidth * ratio;
+                    canvas.height = canvas.offsetHeight * ratio;
+                    canvas.getContext("2d").scale(ratio, ratio);
+                    signaturePad = new SignaturePad(canvas, {
+                        backgroundColor: 'rgb(249, 250, 251)'
+                    });
+                    signaturePad.clear();
+                    log('Signature pad inizializzato.');
+                } catch (error) {
+                    log(`Errore critico durante l'inizializzazione della firma: ${error.message}`, 'error');
+                    showToast("Impossibile avviare la funzione di firma. Verificare la connessione e i permessi di rete.", 'error');
+                    signatureModal.classList.add('hidden');
+                }
+            };
+            
+            const renderSignature = () => {
+                if (currentReport && currentReport.signatureData) {
+                    signatureImg.src = currentReport.signatureData;
+                    signatureImg.classList.remove('hidden');
+                    signaturePlaceholder.classList.add('hidden');
+                } else {
+                    signatureImg.classList.add('hidden');
+                    signaturePlaceholder.classList.remove('hidden');
+                }
+            };
+
+            addSignatureBtn.addEventListener('click', () => {
+                signatureModal.classList.remove('hidden');
+                requestAnimationFrame(setupSignaturePad);
+            });
+            closeSignatureModalBtn.addEventListener('click', () => {
+                signatureModal.classList.add('hidden');
+                if (signaturePad) signaturePad.off();
+            });
+            clearSignatureBtn.addEventListener('click', () => {
+                if(signaturePad) signaturePad.clear();
+            });
+            saveSignatureBtn.addEventListener('click', () => {
+                if (!signaturePad || signaturePad.isEmpty()) {
+                    showToast("Per favore, apponi una firma prima di salvare.", "error");
+                } else {
+                    currentReport.signatureData = signaturePad.toDataURL('image/png');
+                    renderSignature();
+                    signatureModal.classList.add('hidden');
+                    if (signaturePad) signaturePad.off();
+                }
+            });
+
+            // --- GESTIONE FORM PRINCIPALE ---
+            reportForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = reportIdInput.value;
+                
+                currentReport.clientName = clientNameInput.value;
+                currentReport.name = reportNameInput.value;
+                currentReport.description = reportDescriptionInput.value;
+                currentReport.date = reportDateInput.value;
+
+                if (id) {
+                    currentReport.id = id;
+                    saveReport(currentReport);
+                } else {
+                    generateUniqueId(newId => {
+                        currentReport.id = newId;
+                        saveReport(currentReport);
+                    });
+                }
+            });
+
+            // --- GENERAZIONE PDF E ANTEPRIMA ---
+            const generatePDFContent = (report) => {
+                const totalHours = (report.hours || []).reduce((acc, item) => acc + (item.qty * item.price), 0);
+                const totalMaterials = (report.materials || []).reduce((acc, item) => acc + (item.qty * item.price), 0);
+                const grandTotal = totalHours + totalMaterials;
+
+                // CORREZIONE #3: Aggiunto padding alle celle per evitare sovrapposizioni
+                const hoursRows = (report.hours || []).map(item => `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px 5px;">${item.desc}</td>
+                        <td style="padding: 8px 5px; text-align: right;">${item.qty.toFixed(2)}</td>
+                        <td style="padding: 8px 5px; text-align: right;">€ ${item.price.toFixed(2)}</td>
+                        <td style="padding: 8px 5px; text-align: right;">€ ${(item.qty * item.price).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+
+                const materialsRows = (report.materials || []).map(item => `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px 5px;">${item.desc}</td>
+                        <td style="padding: 8px 5px; text-align: right;">${item.qty}</td>
+                        <td style="padding: 8px 5px; text-align: right;">€ ${item.price.toFixed(2)}</td>
+                        <td style="padding: 8px 5px; text-align: right;">€ ${(item.qty * item.price).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+                
+                return `
+                    <div style="font-family: Arial, sans-serif; width: 100%; min-height: 297mm; padding: 20mm; background: white; color: #333; font-size: 10pt; box-sizing: border-box;">
+                        <header style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #333; padding-bottom: 10px;">
+                            <div>
+                                <h1 style="font-size: 24pt; font-weight: bold; color: #0056b3; margin: 0;">Newmeg Srl</h1>
+                                <p style="margin: 2px 0;">Via Ferrarese 30/A - 44042 Cento (FE)</p>
+                                <p style="margin: 2px 0;">Sede Operativa: Via XII Morelli 75/C - 44045 (FE)</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <h2 style="font-size: 16pt; margin: 0;">Rapporto di Lavoro</h2>
+                                <p style="margin: 2px 0;">ID: <strong>${report.id}</strong></p>
+                                <p style="margin: 2px 0;">Data: <strong>${new Date(report.date).toLocaleDateString('it-IT')}</strong></p>
+                            </div>
+                        </header>
+
+                        <section style="margin-top: 20px; border: 1px solid #ccc; padding: 15px; border-radius: 5px;">
+                            <h3 style="font-size: 12pt; font-weight: bold; margin-top: 0;">Dati Cliente e Intervento</h3>
+                            <p><strong>Cliente:</strong> ${report.clientName}</p>
+                            <p><strong>Intervento:</strong> ${report.name}</p>
+                            <p><strong>Descrizione:</strong> ${report.description || 'N/A'}</p>
+                        </section>
+
+                        <!-- CORREZIONE #3: Aggiunto margin-bottom al titolo per distanziarlo dalla tabella -->
+                        <section style="margin-top: 20px;">
+                            <h3 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px;">Dettaglio Ore Lavorate</h3>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                                <thead><tr style="background-color: #f2f2f2; font-weight: bold; text-align: left;"><th style="padding: 8px 5px;">Descrizione</th><th style="padding: 8px 5px; text-align: right;">Ore</th><th style="padding: 8px 5px; text-align: right;">Prezzo/h</th><th style="padding: 8px 5px; text-align: right;">Totale</th></tr></thead>
+                                <tbody>${hoursRows || '<tr><td colspan="4" style="padding: 10px; text-align: center;">Nessuna ora registrata.</td></tr>'}</tbody>
+                            </table>
+                        </section>
+
+                        <section style="margin-top: 20px;">
+                            <h3 style="font-size: 12pt; font-weight: bold; margin-bottom: 10px;">Dettaglio Materiali</h3>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                                <thead><tr style="background-color: #f2f2f2; font-weight: bold; text-align: left;"><th style="padding: 8px 5px;">Descrizione</th><th style="padding: 8px 5px; text-align: right;">Qtà</th><th style="padding: 8px 5px; text-align: right;">Prezzo Unit.</th><th style="padding: 8px 5px; text-align: right;">Totale</th></tr></thead>
+                                <tbody>${materialsRows || '<tr><td colspan="4" style="padding: 10px; text-align: center;">Nessun materiale registrato.</td></tr>'}</tbody>
+                            </table>
+                        </section>
+
+                        <section style="margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <h3 style="font-size: 12pt; font-weight: bold;">Firma del Cliente</h3>
+                                ${report.signatureData ? `<img src="${report.signatureData}" style="border: 1px solid #ccc; max-width: 250px; max-height: 120px; margin-top: 5px;" />` : '<div style="width: 250px; height: 120px; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; color: #999;">Spazio Firma</div>'}
+                            </div>
+                            <div style="text-align: right;">
+                                <table style="font-size: 11pt;">
+                                    <tr><td style="padding: 5px;">Totale Ore:</td><td style="padding: 5px; font-weight: bold;">€ ${totalHours.toFixed(2)}</td></tr>
+                                    <tr><td style="padding: 5px;">Totale Materiali:</td><td style="padding: 5px; font-weight: bold;">€ ${totalMaterials.toFixed(2)}</td></tr>
+                                    <tr style="font-size: 14pt; background: #eee; border-top: 2px solid #333;"><td style="padding: 8px;"><strong>TOTALE FINALE:</strong></td><td style="padding: 8px; font-weight: bold;"><strong>€ ${grandTotal.toFixed(2)}</strong></td></tr>
+                                </table>
+                            </div>
+                        </section>
+
+                        <footer style="position: absolute; bottom: 10mm; left: 20mm; right: 20mm; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
+                            P.I. e C.F. 03388411203 | Numero REA : FE-215672 | Tel. +390510826506 | Mobile. +393500924104 | Mail. info@newmeg.com | Pec. newmeg@pec.it
+                        </footer>
+                    </div>
+                `;
+            };
+
+            const generatePDF = (id) => {
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.get(id);
+
+                request.onsuccess = () => {
+                    const report = request.result;
+                    if (report) {
+                        const pdfContentContainer = document.getElementById('pdf-content');
+                        pdfContentContainer.innerHTML = generatePDFContent(report);
+                        
+                        const elementToCapture = pdfContentContainer.children[0];
+                        
+                        html2canvas(elementToCapture, { scale: 2, useCORS: true }).then(canvas => {
+                            const imgData = canvas.toDataURL('image/png');
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF('p', 'mm', 'a4');
+                            const imgProps= pdf.getImageProperties(imgData);
+                            const pdfWidth = pdf.internal.pageSize.getWidth();
+                            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                            pdf.save(`Rapporto_${report.id}_${report.clientName.replace(/\s/g, '_')}.pdf`);
+                            log(`PDF generato per il rapporto ${id}.`);
+                        }).catch(err => {
+                            log(`Errore html2canvas: ${err}`, 'error');
+                        });
+                    }
+                };
+                request.onerror = (e) => log('Errore nel recupero del rapporto per PDF', 'error');
+            };
+
+            previewReportBtn.addEventListener('click', () => {
+                const previewReport = { ...currentReport };
+                previewReport.clientName = clientNameInput.value;
+                previewReport.name = reportNameInput.value;
+                previewReport.description = reportDescriptionInput.value;
+                previewReport.date = reportDateInput.value;
+                previewReport.id = reportIdInput.value || 'ANTEPRIMA';
+
+                const pdfContent = generatePDFContent(previewReport);
+                const previewWindow = window.open('', '_blank');
+                previewWindow.document.write(pdfContent);
+                previewWindow.document.close();
+                log('Anteprima generata.');
+            });
+
+            // --- IMPOSTAZIONI, BACKUP, EXPORT ---
+            settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+            closeSettingsModalBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+
+            backupBtn.addEventListener('click', () => {
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.getAll();
+
+                request.onsuccess = () => {
+                    const data = JSON.stringify(request.result, null, 2);
+                    const blob = new Blob([data], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `newmeg_backup_${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    log('Backup dei dati completato.');
+                };
+                request.onerror = (e) => log('Errore durante il backup', 'error');
+            });
+
+            restoreInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    showConfirmDialog(
+                        'Ripristina Dati',
+                        'Sei sicuro di voler ripristinare i dati? Tutti i dati attuali verranno sovrascritti.',
+                        () => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                try {
+                                    const data = JSON.parse(e.target.result);
+                                    const transaction = db.transaction(['reports'], 'readwrite');
+                                    const store = transaction.objectStore('reports');
+                                    store.clear();
+                                    data.forEach(item => store.put(item));
+                                    transaction.oncomplete = () => {
+                                        log('Ripristino dati completato.');
+                                        showToast('Dati ripristinati con successo!');
+                                        loadReports();
+                                    };
+                                } catch (err) {
+                                    log('Errore nel parsing del file di backup.', 'error');
+                                    showToast('File di backup non valido o corrotto.', 'error');
+                                }
+                            };
+                            reader.readAsText(file);
+                        }
+                    );
+                }
+                restoreInput.value = '';
+            });
+
+            const exportData = (format) => {
+                const transaction = db.transaction(['reports'], 'readonly');
+                const store = transaction.objectStore('reports');
+                const request = store.getAll();
+
+                request.onsuccess = () => {
+                    const reports = request.result;
+                    const flattenedData = [];
+                    reports.forEach(r => {
+                        const baseData = {
+                            ID_Rapporto: r.id,
+                            Data: r.date,
+                            Cliente: r.clientName,
+                            Nome_Intervento: r.name,
+                            Descrizione_Intervento: r.description,
+                            Firmato: r.signatureData ? 'Sì' : 'No'
+                        };
+                        if (r.hours.length > 0) {
+                            r.hours.forEach(h => {
+                                flattenedData.push({
+                                    ...baseData,
+                                    Tipo_Riga: 'Ora',
+                                    Descrizione_Riga: h.desc,
+                                    Quantita: h.qty,
+                                    Prezzo_Unitario: h.price,
+                                    Totale_Riga: h.qty * h.price
+                                });
+                            });
+                        }
+                        if (r.materials.length > 0) {
+                            r.materials.forEach(m => {
+                                flattenedData.push({
+                                    ...baseData,
+                                    Tipo_Riga: 'Materiale',
+                                    Descrizione_Riga: m.desc,
+                                    Quantita: m.qty,
+                                    Prezzo_Unitario: m.price,
+                                    Totale_Riga: m.qty * m.price
+                                });
+                            });
+                        }
+                        if (r.hours.length === 0 && r.materials.length === 0) {
+                             flattenedData.push(baseData);
+                        }
+                    });
+
+                    const ws = XLSX.utils.json_to_sheet(flattenedData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Rapporti');
+                    const filename = `newmeg_export_${new Date().toISOString().split('T')[0]}.${format}`;
+                    XLSX.writeFile(wb, filename);
+                    log(`Dati esportati in formato ${format.toUpperCase()}.`);
+                };
+            };
+            
+            exportCsvBtn.addEventListener('click', () => exportData('csv'));
+            exportXlsxBtn.addEventListener('click', () => exportData('xlsx'));
+
+            // --- GESTIONE MODALE DI CONFERMA ---
+            let onConfirmCallback = null;
+
+            const showConfirmDialog = (title, message, callback) => {
+                confirmTitle.textContent = title;
+                confirmMessage.textContent = message;
+                onConfirmCallback = callback;
+                confirmModal.classList.remove('hidden');
+            };
+
+            confirmCancelBtn.addEventListener('click', () => {
+                confirmModal.classList.add('hidden');
+                onConfirmCallback = null;
+            });
+
+            confirmOkBtn.addEventListener('click', () => {
+                if (onConfirmCallback) {
+                    onConfirmCallback();
+                }
+                confirmModal.classList.add('hidden');
+                onConfirmCallback = null;
+            });
+
+        });
+    </script>
+</body>
+</html>
